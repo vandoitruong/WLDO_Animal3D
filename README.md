@@ -66,7 +66,7 @@ Loss results:
 ## Demo results
 `python demo.py`
 
-- Currently we have trained it but the results are not good, it does not have an animal-like shape.
+- Currently we have trained it but the results are not good, it does not have an animal-like shape. Please see in `demo_out` folder
 - If you have any comments or suggestions, I would really appreciate it if you could share them with us. Thank you very much!
 
 ## Contribute
