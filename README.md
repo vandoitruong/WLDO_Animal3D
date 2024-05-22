@@ -73,7 +73,7 @@ Loss results:
 Please create a pull request or submit an issue if you would like to contribute.
 
 ## Licensing
-Please follows the license from two original projects.
+Please follow the license from two original projects.
 
 By downloading this dataset, you agree to the [Creative Commons Attribution-NonCommercial 4.0 International license](https://creativecommons.org/licenses/by-nc-sa/4.0/). This license allows users to use, share and adapt the dataset, so long as credit is given to the authors (e.g. by citation) and the dataset is not used for any commercial purposes.
 
