@@ -1,0 +1,12 @@
+chumpy==0.70
+Cython==0.29.21
+matplotlib==3.3.1
+meshzoo==0.9.11
+numpy
+opencv-python
+PyYAML==5.3.1
+scipy
+torchfile
+torchgeometry
+tqdm
+trimesh
