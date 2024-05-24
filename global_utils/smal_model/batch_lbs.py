@@ -104,11 +104,12 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
 
     scaling_factors = torch.ones(N, parent.shape[0], 3).to(Rs.device)
     if betas_logscale is not None:
-        leg_joints = list(range(7,11)) + list(range(11,15)) + list(range(17,21)) + list(range(21,25))
+        # print("betas_logscale:", betas_logscale.shape)
+        leg_joints = list(range(7,11)) + list(range(11,15)) + list(range(17,21)) + list(range(21,25)) #[7->24]
         tail_joints = list(range(25, 32))
         ear_joints = [33, 34]
 
-        beta_scale_mask = torch.zeros(35, 3, 21).to(betas_logscale.device)
+        beta_scale_mask = torch.zeros(35, 3, 6).to(betas_logscale.device)
         beta_scale_mask[leg_joints, [2], [0]] = 1.0 # Leg lengthening
         beta_scale_mask[leg_joints, [0], [1]] = 1.0 # Leg fatness
         beta_scale_mask[leg_joints, [1], [1]] = 1.0 # Leg fatness
@@ -121,7 +122,9 @@ def batch_global_rigid_transformation(Rs, Js, parent, rotate_base = False, betas
         beta_scale_mask[ear_joints, [2], [5]] = 1.0 # Ear z
 
         beta_scale_mask = torch.transpose(
-            beta_scale_mask.reshape(35*3, 21), 0, 1)
+            beta_scale_mask.reshape(35*3, 6), 0, 1)
+
+        # print("beta_scale:", beta_scale_mask.shape)
 
         betas_scale = torch.exp(betas_logscale @ beta_scale_mask)
         scaling_factors = betas_scale.reshape(-1, 35, 3)

@@ -17,14 +17,27 @@ from global_utils.helpers.visualize import Visualizer
 import cv2
 import numpy as np
 from tqdm import tqdm
+import traceback
 
 nn = torch.nn
 
+
+class DemoModel(nn.Module):
+    def __init__( self, device, shape_family_id, load_from_disk, **kwargs):
+
+        super(DemoModel, self).__init__()
+        self.module = Model(device, shape_family_id, load_from_disk, **kwargs)
+
+    def forward(self, batch_input, demo=False):
+        out = self.module(batch_input, demo)
+        return out
+ep = 10
 parser = argparse.ArgumentParser()
-parser.add_argument('--checkpoint', default='../output/model_weights_stage1_5.pth', help='Path to network checkpoint')
+parser.add_argument('--checkpoint', default=f'../output/run5/model_weights_stage1_{ep}.pth', help='Path to network checkpoint')
+# parser.add_argument('--checkpoint', default='../data/pretrained/3501_00034_betas_v4.pth', help='Path to network checkpoint')
 parser.add_argument('--src_dir', default="../example_imgs", type=str, help='The directory of input images')
-parser.add_argument('--result_dir', default='../demo_out', help='Where to export the output data')
-parser.add_argument('--shape_family_id', default=-1, type=int, help='Shape family to use')
+parser.add_argument('--result_dir', default=f'../demo_out/run5/epoch{ep}', help='Where to export the output data')
+parser.add_argument('--shape_family_id', default=1, type=int, help='Shape family to use')
 parser.add_argument('--batch_size', default=1, type=int)
 parser.add_argument('--gpu_ids', default="0", type=str, help='GPUs to use. Format as string, e.g. "0,1,2')
 
@@ -50,7 +63,7 @@ def run_demo(args, device):
 
     # Store smal parameters
     smal_pose = np.zeros((len(dataset), 105))
-    smal_betas = np.zeros((len(dataset), 41))
+    smal_betas = np.zeros((len(dataset), 26))
     smal_camera = np.zeros((len(dataset), 3))
     smal_joints3d = np.zeros((len(dataset), 26, 3))
     smal_imgname = []
@@ -114,25 +127,83 @@ def run_demo(args, device):
     print('*** FINISHED ***')
 
 def load_model_from_disk(model_path, shape_family_id, load_from_disk, device):
-    model = Model(device, shape_family_id, load_from_disk)
+    model = DemoModel(device, shape_family_id, load_from_disk)
     # model = nn.DataParallel(model)
     model = model.to(device)
-    model.load_state_dict(torch.load(model_path))
+    # model.load_state_dict(torch.load(model_path))
     model.eval()
+    # model.eval()
 
-    if model_path is not None:
-        print( "found previous model %s" % model_path )
-        print( "   -> resuming" )
-        model_state_dict = torch.load(model_path)
+    pretrained_dict = torch.load(model_path)
 
-        own_state = model.state_dict()
-        for name, param in model_state_dict.items():
-            try:
-                own_state[name].copy_(param)
-            except:
-                print ("Unable to load: {0}".format(name))
-    else:
-        print ('model_path is none')
+    # model = Model(device, 1, None).to(device)
+
+    model_dict = model.state_dict()
+
+    print("PRETRAIN_DICT")
+    # for i, key in enumerate(pretrained_dict.keys()):
+    #     parameter = pretrained_dict[key]
+    #     # print(f"[{i}]", key, parameter.size())
+    #     if i == 2:
+    #         print(parameter)
+    
+    # print("MODEL_DICT")
+    # for i, key in enumerate(model_dict.keys()):
+    #     parameter = model_dict[key]
+    #     # print(f"[{i}]", key, parameter.size())
+    #     if i == 2:
+    #         print(parameter)
+
+    filtered_pretrained_dict = {}
+
+    # Iterate over each item in pretrained_dict
+    for k, v in pretrained_dict.items():
+        # Check if the key exists in model_dict
+        if k in model_dict:
+            # print(k, model_dict[k].shape, pretrained_dict[k].shape)
+            if model_dict[k].shape == pretrained_dict[k].shape:
+            # If the key exists, add the item to the new dictionary
+                filtered_pretrained_dict[k] = v
+
+    # 1. filter out unnecessary keys
+    # pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+    # 2. overwrite entries in the existing state dict
+    print("len of fitered dict: ", len(filtered_pretrained_dict))
+    # for name, param in filtered_pretrained_dict.items():
+    #     try:
+    #         model_dict[name].copy_(param)
+    #     except Exception as e:
+    #         print(f"Unable to load: {name}")
+    #         print(f"Error: {e}")
+    #         traceback.print_exc()
+
+    model_dict.update(filtered_pretrained_dict)
+    model.load_state_dict(model_dict)
+    model_dict = model.state_dict()
+    
+
+    # print("UPDATED_MODEL_DICT")
+    # for i, key in enumerate(model_dict.keys()):
+    #     parameter = model_dict[key]
+    #     # print(f"[{i}]", key, parameter.size())
+    #     if i == 2:
+    #         print(parameter)
+
+    # if model_path is not None:
+    #     print( "found previous model %s" % model_path )
+    #     print( "   -> resuming" )
+    #     model_state_dict = torch.load(model_path)
+
+    #     own_state = model.state_dict()
+    #     for name, param in model_state_dict.items():
+    #         try:
+    #             own_state[name].copy_(param)
+    #         except Exception as e:
+    #             print(f"Unable to load: {name}")
+    #             print(f"Error: {e}")
+    #             traceback.print_exc()
+    # else:
+    #     print ('model_path is none')
 
     print ("LOADED")
 

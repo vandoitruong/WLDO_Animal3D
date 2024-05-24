@@ -141,3 +141,5 @@ utils/
 animal3d/
 
 demo_out/*npz
+*.log
+*.npy

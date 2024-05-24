@@ -284,8 +284,8 @@ class AnimalDataset(Dataset):
         self.device = config.device
         self.img_dir = BASE_FOLDER #os.path.join(BASE_FOLDER, 'images')
         self.seg_dir = BASE_FOLDER #os.path.join(BASE_FOLDER, 'masks')
-        self.train_jsonfile   = os.path.join(BASE_FOLDER, "train.json") # accessing new version of keypoints.json
-        self.test_jsonfile   = os.path.join(BASE_FOLDER, "test.json")
+        self.train_jsonfile = os.path.join(BASE_FOLDER, "train.json") # accessing new version of keypoints.json
+        self.test_jsonfile = os.path.join(BASE_FOLDER, "test.json")
 
         # self.jsonfile = "/home/bjb10042/projects/data/dogs_v2/stanford/keypoints_v101.json"
 
@@ -296,12 +296,14 @@ class AnimalDataset(Dataset):
         if is_train:
             # self.data_idx = np.load(os.path.join(config.DATASET_FILES[1][dataset]))
             with open(self.train_jsonfile) as anno_file:
-                self.anno = json.load(anno_file)["data"]
+                raw_anno = json.load(anno_file)["data"]
+                self.anno = [sample for sample in raw_anno if sample['supercategory'] == 1]
                 self.data_idx = np.arange(len(self.anno))
         else:
             # self.data_idx = np.load(os.path.join(config.DATASET_FILES[0][dataset]))
             with open(self.test_jsonfile) as anno_file:
-                self.anno = json.load(anno_file)["data"]
+                raw_anno = json.load(anno_file)["data"]
+                self.anno = [sample for sample in raw_anno if sample['supercategory'] == 1]
                 self.data_idx = np.arange(len(self.anno))
 
         # self.options = options
@@ -464,7 +466,7 @@ class AnimalDataset(Dataset):
 
         shape = a["shape"] # (20)
         shape_extra = a["shape_extra"] # (21)
-        beta = torch.tensor(shape+shape_extra, dtype=torch.float).to(self.device)
+        beta = torch.tensor(shape, dtype=torch.float).to(self.device)
         pose = a["pose"]
         theta = torch.tensor(pose, dtype=torch.float).to(self.device)
 

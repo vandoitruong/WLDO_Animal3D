@@ -50,13 +50,13 @@ data/
 ```
 
 ### Modification
-- We modified the output of Shape predictor in WLDO from 26 paras to 41 paras based on Animal3d dataset.
+- We modified the output of Shape predictor in WLDO from 26 paras to 41 paras based on Animal3d dataset. (actutualy, this change didn't work, I return again to 26 paras, because I think that 21 betas extra can not replace 6 scale parameters)
 - The loss function is L2 based on WLDO paper and the shape and pose prior loss are included based on Animal3D paper.
 - 26 Keypoints are extracted from vertices using mean value (just guess, dont have any instructions) from specific positions  from `train.json` file, we modified it the `global_utils/smal_model/smal_torch.py`. And the `config.py` file are also modified in `MODEL_JOINTS`, `EVAL_KEYPOINTS`
-- Create a `train.py` file, including 2 stage training based on Supplementary material of WLDO paper.
+- Create a `train.py` file, including 2 stage training based on Supplementary material of WLDO paper. I also tried another weight ratio of losses
 
 ## Trainning
-We set the 100 epochs on each stage
+We set the 100 or 200 epochs on each
 
 `python train.py`
 

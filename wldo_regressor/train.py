@@ -19,14 +19,14 @@ import matplotlib.pyplot as plt
 
 # Define command-line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('--output_dir', default='../output', help='Where to export the SMAL fits')
-# parser.add_argument('--checkpoint', default='../data/pretrained/model_epoch_00000999.pth', help='Path to network checkpoint')
+parser.add_argument('--output_dir', default='../output/run5/', help='Where to export the SMAL fits')
+# parser.add_argument('--checkpoint', default='../output/run3/model_weights_stage1_4.pth', help='Path to network checkpoint')
 parser.add_argument('--checkpoint', default='../data/pretrained/3501_00034_betas_v4.pth', help='Path to network checkpoint')
 parser.add_argument('--dataset', default='animal3d', choices=['stanford', 'animal_pose'], help='Choose evaluation dataset')
 parser.add_argument('--log_freq', default=50, type=int, help='Frequency of printing intermediate results')
 parser.add_argument('--batch_size', default=32, type=int, help='Batch size for testing')
 parser.add_argument('--num_workers', default=0, type=int, help='Number of processes for data loading')
-parser.add_argument('--shape_family_id', default=-1, type=int, help='Shape family to use')
+parser.add_argument('--shape_family_id', default=1, type=int, help='Shape family to use')
 parser.add_argument('--gpu_ids', default="0", type=str, help='GPUs to use. Format as string, e.g. "0,1,2')
 parser.add_argument('--param_dir', default="NONE", type=str, help='Exported parameter folder to load')
 
@@ -66,9 +66,9 @@ def shape_prior_loss(pred_shape, gt_shape):
 def total_loss(preds, gt, stage):
     if stage == 1:
         lambda_joints = 10.0
-        lambda_pose = 1.0
-        lambda_shape = 1.0
-        lambda_sil = 0.0
+        lambda_pose = 1
+        lambda_shape = 1
+        lambda_sil = 10.0
 
     elif stage == 2:
         lambda_joints = 10.0
@@ -80,18 +80,24 @@ def total_loss(preds, gt, stage):
     Ljoints = joint_loss(preds['synth_landmarks'], gt['keypoints'])
     Lsil = silhouette_loss(preds['synth_silhouettes'], gt['seg'])
     Lpose = pose_prior_loss(preds['pose'], gt['pose'])
-    Lshape = shape_prior_loss(preds['betas'], gt['betas'])
+    Lshape = shape_prior_loss(preds['betas_pred'], gt['betas'])
 
     total_loss_value = lambda_joints * Ljoints + lambda_sil * Lsil + lambda_pose*Lpose + lambda_shape*Lshape
 
     return total_loss_value
 
+class TrainModel(nn.Module):
+    def __init__( self, device, shape_family_id, load_from_disk, **kwargs):
 
+        super(TrainModel, self).__init__()
+        self.module = Model(device, shape_family_id, load_from_disk, **kwargs)
+
+    def forward(self, batch_input, demo=False):
+        out = self.module(batch_input, demo)
+        return out
+    
 if __name__ == '__main__':
     args = parser.parse_args()
-
-    # Configure logging
-    logging.basicConfig(filename='training.log', level=logging.INFO)
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_ids
     print (os.environ['CUDA_VISIBLE_DEVICES'])
@@ -104,15 +110,38 @@ if __name__ == '__main__':
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
 
+    # Configure logging
+    logging.basicConfig(filename=f'{args.output_dir}/training.log', level=logging.INFO)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if not os.path.exists(args.checkpoint):
         print (f"Unable to find: {args.checkpoint}")
+
+    pretrained_dict = torch.load(args.checkpoint)
+    print("Len of pretrained model: ", len(pretrained_dict))
+
+    model = TrainModel(device, args.shape_family_id, None).to(device)
+
+    model_dict = model.state_dict()
+
+    # 1. filter out unnecessary keys
+    filtered_pretrained_dict = {}
+
+    # Iterate over each item in pretrained_dict
+    for k, v in pretrained_dict.items():
+        # Check if the key exists in model_dict
+        if k in model_dict:
+            # print(k, model_dict[k].shape, pretrained_dict[k].shape)
+            if model_dict[k].shape == pretrained_dict[k].shape:
+            # If the key exists, add the item to the new dictionary
+                filtered_pretrained_dict[k] = v
+
+    print("Len of fitered dict: ", len(filtered_pretrained_dict))
+    # 2. overwrite entries in the existing state dict
+    model_dict.update(filtered_pretrained_dict)
+    model.load_state_dict(model_dict)
     
-    load_from_disk = os.path.exists(args.param_dir)
-
-    model = Model(device, 1, None).to(device)
-
     train_data = AnimalDataset(
             args.dataset,
             is_train=True, 
@@ -136,8 +165,8 @@ if __name__ == '__main__':
         num_workers=args.num_workers)
     
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    train_tqdm_iterator = tqdm(train_loader, desc='Training', total=len(train_loader))
-    test_tqdm_iterator = tqdm(test_loader, desc='Testing', total=len(test_loader))
+    # train_tqdm_iterator = tqdm(train_loader, desc='Training', total=len(train_loader))
+    # test_tqdm_iterator = tqdm(test_loader, desc='Testing', total=len(test_loader))
 
     # Lists to store loss values
     train_losses_stage1 = []
@@ -146,11 +175,11 @@ if __name__ == '__main__':
     test_losses_stage2 = []
 
     # Stage 1
-    num_epochs_stage1 = 100
+    num_epochs_stage1 = 200
     for epoch in range(num_epochs_stage1):
         model.train()
         epoch_train_loss = 0
-        for step, batch in enumerate(train_tqdm_iterator):
+        for batch in tqdm(train_loader, desc='Training', total=len(train_loader)):
             preds = model(batch)
             loss = total_loss(preds, batch, stage=1)
             loss.backward()
@@ -161,64 +190,64 @@ if __name__ == '__main__':
         train_losses_stage1.append(epoch_train_loss / len(train_loader))
         logging.info(f"Stage 1: Epoch {epoch + 1}/{num_epochs_stage1}, Training Loss: {train_losses_stage1[-1]}")
         print(f"Stage 1: Epoch {epoch + 1}/{num_epochs_stage1}, Training Loss: {train_losses_stage1[-1]}")
-        np.save('train_losses_stage1.npy', np.array(train_losses_stage1))
+        np.save(f'{args.output_dir}/train_losses_stage1.npy', np.array(train_losses_stage1))
         # Validating
         
         model.eval()
         epoch_test_loss = 0
         with torch.no_grad():
-            for step, batch in enumerate(test_tqdm_iterator):
+            for batch in tqdm(test_loader, desc='Validating', total=len(test_loader)):
                 preds = model(batch)
                 loss = total_loss(preds, batch, stage=1)
                 epoch_test_loss += loss.item()
         test_losses_stage1.append(epoch_test_loss / len(test_loader))
         logging.info(f"Stage 1: Epoch {epoch + 1}/{num_epochs_stage1}, Testing Loss: {test_losses_stage1[-1]}")
         print(f"Stage 1: Epoch {epoch + 1}/{num_epochs_stage1}, Testing Loss: {test_losses_stage1[-1]}")
-        np.save('test_losses_stage1.npy', np.array(test_losses_stage1))
+        np.save(f'{args.output_dir}/test_losses_stage1.npy', np.array(test_losses_stage1))
 
-        if (epoch+1) % 5 == 0:
+        if (epoch+1) % 10 == 0:
             torch.save(model.state_dict(), f'{args.output_dir}/model_weights_stage1_{epoch + 1}.pth')
 
     # Stage 2
-    num_epochs_stage2 = 100
-    for epoch in range(num_epochs_stage2):
-        model.train()
-        epoch_train_loss = 0
-        for step, batch in enumerate(train_tqdm_iterator):
-            preds = model(batch)
-            loss = total_loss(preds, batch, stage=2)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            epoch_train_loss += loss.item()
+    # num_epochs_stage2 = 1
+    # for epoch in range(num_epochs_stage2):
+    #     model.train()
+    #     epoch_train_loss = 0
+    #     for step, batch in enumerate(train_tqdm_iterator):
+    #         preds = model(batch)
+    #         loss = total_loss(preds, batch, stage=2)
+    #         loss.backward()
+    #         optimizer.step()
+    #         optimizer.zero_grad()
+    #         epoch_train_loss += loss.item()
 
-        train_losses_stage2.append(epoch_train_loss / len(train_loader))
-        logging.info(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage2}, Training Loss: {train_losses_stage2[-1]}")
-        print(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage1}, Training Loss: {train_losses_stage1[-1]}")
-        np.save('train_losses_stage2.npy', np.array(train_losses_stage2))
-        # Validating
+    #     train_losses_stage2.append(epoch_train_loss / len(train_loader))
+    #     logging.info(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage2}, Training Loss: {train_losses_stage2[-1]}")
+    #     print(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage1}, Training Loss: {train_losses_stage1[-1]}")
+    #     np.save(f'{args.output_dir}/train_losses_stage2.npy', np.array(train_losses_stage2))
+    #     # Validating
         
-        model.eval()
-        epoch_test_loss = 0
-        with torch.no_grad():
-            for step, batch in enumerate(test_tqdm_iterator):
-                preds = model(batch)
-                loss = total_loss(preds, batch, stage=2)
-                epoch_test_loss += loss.item()
-        test_losses_stage2.append(epoch_test_loss / len(test_loader))
-        np.save('test_losses_stage2.npy', np.array(test_losses_stage2))
-        logging.info(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage2}, Testing Loss: {test_losses_stage2[-1]}")
-        print(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage2}, Testing Loss: {test_losses_stage2[-1]}")
+    #     model.eval()
+    #     epoch_test_loss = 0
+    #     with torch.no_grad():
+    #         for step, batch in enumerate(test_tqdm_iterator):
+    #             preds = model(batch)
+    #             loss = total_loss(preds, batch, stage=2)
+    #             epoch_test_loss += loss.item()
+    #     test_losses_stage2.append(epoch_test_loss / len(test_loader))
+    #     np.save(f'{args.output_dir}/test_losses_stage2.npy', np.array(test_losses_stage2))
+    #     logging.info(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage2}, Testing Loss: {test_losses_stage2[-1]}")
+    #     print(f"Stage 2: Epoch {epoch + 1}/{num_epochs_stage2}, Testing Loss: {test_losses_stage2[-1]}")
         
-        if (epoch+1) % 5 == 0:
-            torch.save(model.state_dict(), f'{args.output_dir}/model_weights_stage2_{epoch + 1}.pth')
+    #     if (epoch+1) % 5 == 0:
+    #         torch.save(model.state_dict(), f'{args.output_dir}/model_weights_stage2_{epoch + 1}.pth')
 
     # Plot and save the loss values
     plt.figure(figsize=(10, 5))
     plt.plot(train_losses_stage1, label='Training Loss Stage 1')
     plt.plot(test_losses_stage1, label='Validation Loss Stage 1')
-    plt.plot(train_losses_stage2, label='Training Loss Stage 2')
-    plt.plot(test_losses_stage2, label='Validation Loss Stage 2')
+    # plt.plot(train_losses_stage2, label='Training Loss Stage 2')
+    # plt.plot(test_losses_stage2, label='Validation Loss Stage 2')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Training and Validation Loss')

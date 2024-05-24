@@ -78,7 +78,7 @@ class Model(nn.Module):
         else:
             betas_pred = batch_input['pred_shape'][:, :20].to(self.device)
             if batch_input['pred_shape'].shape[1] == 20:
-                betas_logscale = torch.zeros_like(betas_pred[:, :21]).to(self.device)
+                betas_logscale = torch.zeros_like(betas_pred[:, :6]).to(self.device)
             else:
                 betas_logscale = batch_input['pred_shape'][:, 20:].to(self.device)
 
@@ -109,6 +109,7 @@ class Model(nn.Module):
         preds = {}
         preds['pose'] = pose_pred
         preds['betas'] = all_betas
+        preds['betas_pred'] = betas_pred
         preds['camera'] = pred_camera
         preds['trans'] = trans_pred
         

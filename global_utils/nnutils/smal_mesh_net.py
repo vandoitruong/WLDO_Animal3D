@@ -265,14 +265,14 @@ class CodePredictor(nn.Module):
             scale_init = None
             if shape_init is not None:
                 shape_init = shape_init[:20]
-                if shape_init.shape[0] == 41:
+                if shape_init.shape[0] == 26:
                     scale_init = shape_init[20:]                    
             
             self.betas_predictor = BetasPredictor(
                 nz_feat, nenc_feat, num_betas=20, model_mean = shape_init)
 
             self.betas_scale_predictor = BetaScalePredictor(
-                nz_feat, nenc_feat, num_beta_scale=21, model_mean = scale_init)
+                nz_feat, nenc_feat, num_beta_scale=6, model_mean = scale_init)
 
     def forward(self, feat, enc_feat):
         if self.use_camera:
