@@ -140,6 +140,6 @@ utils/
 *.tar
 animal3d/
 
-demo_out/*npz
+*npz
 *.log
 *.npy
